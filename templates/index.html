@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ELIZSA und LLM Therapiedemo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css?v=20260424a">
+</head>
+<body>
+    <header class="site-header">
+        <div class="header-topline"></div>
+        <div class="header-main">
+            <div class="brand-block">
+                <img class="brand-logo" src="/static/logo.png" alt="Klinik Logo">
+                <div class="brand-copy">
+                    <p class="brand-overline">&nbsp;Universitätsklinik für psychosomatische Medizin und Psychotherapie</p>
+                    <h1 class="brand-title">&nbsp;ELIZA&nbsp;und&nbsp;LLM&nbsp;im&nbsp;direkten&nbsp;Vergleich</h1>
+                </div>
+            </div>
+            <nav class="header-nav" aria-label="Schnellnavigation">
+                <a href="#chat-section">Chat</a>
+                <a href="#config-section">Konfiguration</a>
+                <a href="/erklaerung">Hintergrund</a>
+                <a href="/admin">Admin-Bereich</a>
+            </nav>
+        </div>
+        <!-- <div class="header-subline">
+            <div class="breadcrumb" aria-label="Breadcrumb">
+                <a href="#">Home</a>
+                <span>/</span>
+                <a href="#">Psychosomatik</a>
+                <span>/</span>
+                <strong>Dialoglabor</strong>
+            </div>
+            <div class="news-ticker">
+                <strong>Aktuelles:</strong>
+                <span>Neue Demo-Sessionstile fuer CBT und klientenzentrierte Gespraechsfuehrung verfuegbar.</span>
+            </div>
+        </div> -->
+    </header>
+
+    <main class="page-shell">
+        <!-- <section class="hero-card">
+             <div class="hero-grid">
+                <div>
+                    <p class="eyebrow">Universitätsklinik für psychosomatische Medizin und Psychotherapie</p>
+                    <h2 class="hero-title">ELIZA&nbsp;und&nbsp;LLM&nbsp;im&nbsp;direkten&nbsp;Vergleich</h2>
+                    <p class="lead">
+                        Diese Oberfläche simuliert ein psychotherapeutisches Gespräch in zwei Varianten:
+                        regelbasiert mit ELIZA und modellbasiert mit einem LLM.
+                    </p>
+                     <div class="notice">
+                        <strong>Wichtiger Hinweis:</strong>
+                        <span>{{ system_notice }}</span>
+                    </div> 
+                </div>
+                <aside class="hero-aside" aria-label="Kontakt und Hinweise">
+                    <h3>Kontakt und Hinweise</h3>
+                    <p>Die feste Kontaktspalte rechts bleibt beim Scrollen sichtbar und bietet den schnellsten Zugang zu Ansprechpartnern.</p>
+                    <p>Auf kleinen Geraeten wird sie automatisch unter den Hauptinhalt verschoben.</p>
+                </aside>
+            </div> 
+        </section> -->
+
+        <section id="chat-section" class="chat-card">
+            <div class="section-header">
+                <h3>Gesprächsfenster</h3>
+                <p class="session-line">Sitzung: <span id="session-id">noch nicht gestartet</span></p>
+            </div>
+            <div id="chat" class="chat-log" aria-live="polite"></div>
+            <form id="chat-form" class="chat-form">
+                <label class="sr-only" for="message">Nachricht</label>
+                <textarea id="message" name="message" rows="4" maxlength="4000" placeholder="Beschreibe, was dich gerade beschaeftigt."></textarea>
+                <div class="form-row">
+                    <button type="submit">Nachricht senden</button>
+                    <button type="button" id="reset-chat" class="secondary">Verlauf loeschen</button>
+                </div>
+            </form>
+        </section>
+
+        <section id="config-section" class="control-card">
+            <div class="section-header">
+                <h3>Konfiguration</h3>
+                <p id="mode-description" class="mode-description">Script-basiert mit Keyword-Prioritaeten und ELIZA-typischen Reassemblies.</p>
+            </div>
+            <div class="config-grid">
+                <div>
+                    <label class="field-label" for="mode">Gespraechsmodus</label>
+                    <select id="mode" class="mode-select">
+                        <option value="eliza">ELIZA</option>
+                        <option value="llm">moderner Chatbot</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label" for="style">Therapeutischer Stil</label>
+                    <select id="style" class="mode-select">
+                        {% for style_key, style_value in styles.items() %}
+                        <option value="{{ style_key }}">{{ style_value.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <template id="message-template">
+        <article class="bubble-wrap">
+            <div class="bubble-meta"></div>
+            <div class="bubble"></div>
+        </article>
+    </template>
+
+    <script src="/static/app.js" defer></script>
+</body>
+</html>

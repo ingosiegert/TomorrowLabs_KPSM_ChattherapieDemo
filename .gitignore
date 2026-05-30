@@ -1,0 +1,21 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+
+# Local runtime data
+sessions/*.json
+!sessions/.gitkeep
+
+# Local configuration with real secrets
+config.yaml
+
+# OS/editor files
+.DS_Store
+.vscode/
+.idea/

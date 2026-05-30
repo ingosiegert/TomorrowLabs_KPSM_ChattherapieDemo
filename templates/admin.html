@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin-Bereich | ELIZSA LLM Demo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <main class="admin-shell">
+        <section class="admin-list">
+            <p class="eyebrow">Admin-Bereich</p>
+            <h1>Gespeicherte Sitzungen</h1>
+            <p class="lead">Uebersicht aller bisherigen Gespraeche mit Stil, Modus, Eskalationsstatus und Kurzvorschau.</p>
+            <p class="admin-link-row"><a class="admin-link" href="/">Zurueck zum Chat</a></p>
+
+            <div class="session-list">
+                {% for session in sessions %}
+                <a class="session-item{% if selected_session_id == session.session_id %} active{% endif %}" href="/admin?session_id={{ session.session_id }}">
+                    <strong>{{ session.session_id }}</strong>
+                    <div class="session-meta">
+                        <span class="pill">{{ session.mode }}</span>
+                        <span class="pill">{{ session.style }}</span>
+                        <span class="pill">{{ session.message_count }} Eintraege</span>
+                        {% if session.escalated %}
+                        <span class="pill warn">Eskalation</span>
+                        {% endif %}
+                    </div>
+                    <p class="session-preview">{{ session.preview }}</p>
+                </a>
+                {% else %}
+                <p class="empty-state">Noch keine Sitzungen gespeichert.</p>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="admin-detail">
+            {% if selected_session %}
+            <p class="eyebrow">Detailansicht</p>
+            <h1>{{ selected_session.session_id }}</h1>
+            <div class="session-meta">
+                <span class="pill">{{ selected_session.mode }}</span>
+                <span class="pill">{{ selected_session.style }}</span>
+                <span class="pill">{{ selected_session.created_at }}</span>
+                {% if selected_session.escalated %}
+                <span class="pill warn">Eskalation</span>
+                {% endif %}
+            </div>
+
+            <div class="transcript">
+                {% for entry in selected_session.history %}
+                <article class="bubble-wrap {{ entry.role }}">
+                    <div class="bubble-meta">{{ entry.role }}</div>
+                    <div class="bubble">{{ entry.content }}</div>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="eyebrow">Detailansicht</p>
+            <h1>Keine Sitzung ausgewaehlt</h1>
+            <p class="empty-state">Waehle links eine Sitzung aus, um den Verlauf im Admin-Bereich zu sehen.</p>
+            {% endif %}
+        </section>
+    </main>
+</body>
+</html>

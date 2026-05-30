@@ -1,0 +1,543 @@
+import json
+from pathlib import Path
+
+reflections = {
+    # Pronomen / Personalformen
+    "ich": "du",
+    "mich": "dich",
+    "mir": "dir",
+    "meiner": "deiner",
+    "meinem": "deinem",
+    "meinen": "deinen",
+    "mein": "dein",
+    "meine": "deine",
+    "du": "ich",
+    "dich": "mich",
+    "dir": "mir",
+    "deiner": "meiner",
+    "deinem": "meinem",
+    "deinen": "meinen",
+    "dein": "mein",
+    "deine": "meine",
+
+    # Possessiv / Plural und Höflichkeit
+    "wir": "ihr",
+    "uns": "euch",
+    "unser": "euer",
+    "unsere": "eure",
+    "unserem": "eurem",
+    "unseren": "euren",
+    "ihr": "wir",
+    "euch": "uns",
+    "euer": "unser",
+    "eure": "unsere",
+    "eurem": "unserem",
+    "euren": "unseren",
+    "sie": "ich",
+    "ihnen": "mir",
+    "ihrerseits": "meinerseits",
+
+    # Verben / Hilfsverben
+    "bin": "bist",
+    "bist": "bin",
+    "war": "warst",
+    "warst": "war",
+    "habe": "hast",
+    "hast": "habe",
+    "hatte": "hattest",
+    "hattest": "hatte",
+    "werde": "wirst",
+    "wirst": "werde",
+    "kann": "kannst",
+    "kannst": "kann",
+    "will": "willst",
+    "willst": "will",
+    "möchte": "möchtest",
+    "möchtest": "möchte",
+    "muss": "musst",
+    "musst": "muss",
+    "soll": "sollst",
+    "sollst": "soll",
+
+    # Häufige Phrasen
+    "ich bin": "du bist",
+    "ich war": "du warst",
+    "ich habe": "du hast",
+    "ich hatte": "du hattest",
+    "ich werde": "du wirst",
+    "ich kann": "du kannst",
+    "ich will": "du willst",
+    "ich möchte": "du möchtest",
+    "du bist": "ich bin",
+    "du warst": "ich war",
+    "du hast": "ich habe",
+    "du hattest": "ich hatte",
+    "du wirst": "ich werde",
+    "du kannst": "ich kann",
+    "du willst": "ich will",
+    "du möchtest": "ich möchte"
+}
+
+defaults = [
+    "Bitte erzähle weiter.",
+    "Kannst du das näher erläutern?",
+    "Warum sagst du das?",
+    "Wie fühlst du dich dabei?",
+    "Was bedeutet das für dich?",
+    "Kannst du ein Beispiel nennen?",
+    "Das klingt wichtig. Erzähl mir mehr darüber.",
+    "Wie hängt das mit deiner aktuellen Situation zusammen?",
+    "Was geht dir dabei durch den Kopf?",
+    "Was wäre für dich eine hilfreiche nächste Frage?",
+    "Welcher Teil davon berührt dich gerade am meisten?",
+    "Wenn du es in einem Satz zuspitzt: Worum geht es dir im Kern?",
+    "Was daran fühlt sich im Moment am dringlichsten an?",
+    "Welche kleine Veränderung würde dir jetzt am ehesten helfen?",
+    "Woran würdest du merken, dass es ein Stück besser wird?",
+    "Welche Gedanken tauchen kurz vor diesem Gefühl auf?",
+    "Was brauchst du gerade, um dich etwas stabiler zu fühlen?",
+    "Was ist dir daran besonders wichtig?",
+    "Wenn du darauf freundlich blickst: Was fällt dir auf?",
+    "Was würdest du einer nahestehenden Person in derselben Lage sagen?",
+    "Welche Seite in dir meldet sich dabei besonders stark?"
+]
+
+memory_triggers = [
+    "mutter", "vater", "eltern", "familie", "kindheit", "traum", "angst",
+    "wunsch", "problem", "konflikt", "schuld", "stress", "arbeit", "beziehung"
+]
+
+rules = []
+
+def add(keyword, rank, patterns=None, responses=None, tags=None):
+    rules.append({
+        "id": f"de_eliza_{len(rules)+1:03d}",
+        "keyword": keyword,
+        "rank": rank,
+        "patterns": patterns or [],
+        "responses": responses or [],
+        "tags": tags or []
+    })
+
+
+def unique_in_order(items):
+    seen = set()
+    result = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
+
+
+VARIATION_BY_TAG = {
+    "emotion": [
+        "Wo spürst du dieses Gefühl am deutlichsten?",
+        "Welche Situation verstärkt dieses Gefühl typischerweise?",
+        "Was würde dir emotional gerade etwas Halt geben?"
+    ],
+    "relations": [
+        "Welche Dynamik zwischen euch wiederholt sich dabei?",
+        "Was würdest du dir im Kontakt mit dieser Person wünschen?",
+        "Was wurde zwischen euch bisher nicht klar ausgesprochen?"
+    ],
+    "cognition": [
+        "Welche Annahme steckt hinter diesem Gedanken?",
+        "Wie würdest du diese Sicht in einem ruhigen Moment prüfen?",
+        "Gibt es eine alternative Deutung, die ebenfalls passt?"
+    ],
+    "desire": [
+        "Was macht dir an diesem Wunsch am meisten Hoffnung?",
+        "Welcher erste konkrete Schritt wäre realistisch?",
+        "Was könnte dich bei diesem Wunsch unterstützen?"
+    ],
+    "obligation": [
+        "Von wem kommt dieses innere oder äußere Muss?",
+        "Was würde sich ändern, wenn aus Muss eher ein Dürfen wird?",
+        "Welche Grenze wäre hier für dich hilfreich?"
+    ],
+    "default": [
+        "Was davon möchtest du als Nächstes vertiefen?",
+        "Welcher Punkt fühlt sich gerade am zentralsten an?",
+        "Womit sollen wir an dieser Stelle beginnen?"
+    ]
+}
+
+
+def enrich_rules_for_variety(rule_list):
+    for rule in rule_list:
+        responses = [response for response in rule.get("responses", []) if isinstance(response, str) and response.strip()]
+        responses = unique_in_order(responses)
+        tags = [str(tag).lower() for tag in rule.get("tags", [])]
+        pool = []
+        for tag in tags:
+            pool.extend(VARIATION_BY_TAG.get(tag, []))
+        if not pool:
+            pool = list(VARIATION_BY_TAG["default"])
+        if not pool:
+            rule["responses"] = responses
+            continue
+        start = sum(ord(ch) for ch in str(rule.get("keyword", ""))) % len(pool)
+        extras = [pool[(start + offset) % len(pool)] for offset in range(min(3, len(pool)))]
+        rule["responses"] = unique_in_order(responses + extras)
+
+
+def enrich_patterns_for_coverage(rule_list):
+    for rule in rule_list:
+        patterns = [pattern for pattern in rule.get("patterns", []) if isinstance(pattern, str) and pattern.strip()]
+        expanded = []
+        for raw in patterns:
+            normalized = " ".join(raw.strip().split())
+            expanded.append(normalized)
+            if normalized.startswith("* ") and normalized.endswith(" *"):
+                core = normalized[2:-2].strip()
+                if core:
+                    expanded.extend([f"* {core}", f"{core} *", core])
+            elif normalized.startswith("* "):
+                core = normalized[2:].strip()
+                if core:
+                    expanded.append(core)
+            elif normalized.endswith(" *"):
+                core = normalized[:-2].strip()
+                if core:
+                    expanded.append(core)
+        rule["patterns"] = unique_in_order(expanded) if expanded else ["*"]
+
+# Core openings / closings
+core = [
+("hallo",100,["* hallo *","hallo *","hi *","guten tag *"],["Hallo. Worüber möchtest du sprechen?","Guten Tag. Wie geht es dir heute?","Hallo. Was beschäftigt dich gerade?"],["greeting"]),
+("tschüss",100,["* tschüss *","* auf wiedersehen *","* bis bald *"],["Auf Wiedersehen.","Danke für das Gespräch.","Wir können das Gespräch hier beenden."],["closing"]),
+("danke",5,["* danke *","* vielen dank *"],["Gern. Was möchtest du als Nächstes betrachten?","Wofür bist du gerade dankbar?","Wie fühlt es sich an, das zu sagen?"],["social"]),
+("bitte",3,["* bitte *"],["Du formulierst das als Bitte. Was wünschst du dir genau?","Was wäre für dich hilfreich?","Warum ist dir das wichtig?"],["social"]),
+("entschuldigung",10,["* entschuldigung *","* sorry *","* tut mir leid *"],["Entschuldigungen sind hier nicht nötig.","Warum entschuldigst du dich?","Was löst den Wunsch aus, dich zu entschuldigen?"],["social"]),
+]
+for c in core: add(*c)
+
+# Emotional states
+emotion_rules = {
+"traurig": ["Was macht dich traurig?","Seit wann fühlst du dich traurig?","Was würde dir in dieser Traurigkeit helfen?"],
+"deprimiert": ["Es klingt, als würde dich das stark belasten. Was ist passiert?","Was bedeutet deprimiert für dich?","Hast du dieses Gefühl schon länger?"],
+"glücklich": ["Was macht dich glücklich?","Wie kannst du dieses Gefühl bewahren?","Was hat dazu beigetragen?"],
+"zufrieden": ["Was gibt dir dieses Gefühl von Zufriedenheit?","Was ist gerade stimmig für dich?","War das schon immer so?"],
+"wütend": ["Worüber bist du wütend?","Was würdest du am liebsten sagen oder tun?","Was steckt vielleicht hinter der Wut?"],
+"ärgerlich": ["Was ärgert dich daran?","Wie gehst du mit diesem Ärger um?","Gegen wen oder was richtet sich der Ärger?"],
+"ängstlich": ["Wovor hast du Angst?","Was wäre das Schlimmste, das passieren könnte?","Was hilft dir normalerweise bei Angst?"],
+"angst": ["Welche Angst meinst du genau?","Wann tritt diese Angst auf?","Was würde dir Sicherheit geben?"],
+"besorgt": ["Worüber machst du dir Sorgen?","Wie realistisch wirkt diese Sorge für dich?","Was könnte die Sorge kleiner machen?"],
+"nervös": ["Was macht dich nervös?","Ist diese Nervosität neu für dich?","Wie spürst du die Nervosität körperlich?"],
+"gestresst": ["Was setzt dich unter Druck?","Welche Anforderungen spürst du gerade?","Was wäre eine kleine Entlastung?"],
+"überfordert": ["Was genau ist zu viel?","Welche Aufgabe wirkt am schwersten?","Was könntest du reduzieren oder verschieben?"],
+"einsam": ["Wann fühlst du dich besonders einsam?","Welche Art von Nähe fehlt dir?","Mit wem würdest du gern verbunden sein?"],
+"schuldig": ["Wofür fühlst du dich schuldig?","Wer macht dir Schuldgefühle?","Ist die Schuld wirklich deine?"],
+"beschämt": ["Was macht dir daran Scham?","Vor wem schämst du dich?","Was würdest du jemand anderem in deiner Lage sagen?"],
+"hoffnungslos": ["Was lässt dich hoffnungslos fühlen?","Gab es Momente, in denen es anders war?","Was wäre ein sehr kleiner Hoffnungsschimmer?"],
+"unsicher": ["Was macht dich unsicher?","Welche Information fehlt dir?","Was würde dir mehr Sicherheit geben?"],
+"verletzt": ["Wer oder was hat dich verletzt?","Was brauchst du nach dieser Verletzung?","Hast du das aussprechen können?"],
+"eifersüchtig": ["Worauf bist du eifersüchtig?","Was sagt diese Eifersucht über deine Wünsche?","Welche Angst steckt darin?"],
+"leer": ["Was meinst du mit leer?","Wann spürst du diese Leere besonders?","Was hat früher Bedeutung gegeben?"],
+}
+for kw, res in emotion_rules.items():
+    add(kw, 25, [f"* {kw} *", f"* ich bin {kw} *", f"* ich fühle mich {kw} *"], res, ["emotion"])
+
+# I statements
+statement_patterns = [
+("ich bin",40,["* ich bin *"],["Warum bist du {1}?","Seit wann bist du {1}?","Wie fühlt es sich an, {1} zu sein?","Was bedeutet es für dich, {1} zu sein?"],["self"]),
+("ich war",35,["* ich war *"],["Warum warst du {1}?","Was hat sich seitdem verändert?","Wie denkst du heute darüber, dass du {1} warst?"],["self","past"]),
+("ich fühle",40,["* ich fühle *","* ich fühle mich *"],["Warum fühlst du {1}?","Fühlst du häufig {1}?","Was löst dieses Gefühl aus?","Was machst du, wenn du {1} fühlst?"],["emotion","self"]),
+("ich habe",35,["* ich habe *"],["Warum erwähnst du, dass du {1} hast?","Was bedeutet {1} für dich?","Wie lange hast du schon {1}?"],["self"]),
+("ich hatte",30,["* ich hatte *"],["Was bedeutete {1} für dich?","Vermisst du {1}?","Wie beeinflusst dich {1} heute noch?"],["past"]),
+("ich möchte",45,["* ich möchte *","* ich will *"],["Warum möchtest du {1}?","Was würde passieren, wenn du {1} würdest?","Was hält dich davon ab, {1}?","Wie wichtig ist dir {1}?"],["desire"]),
+("ich brauche",45,["* ich brauche *"],["Warum brauchst du {1}?","Was würde passieren, wenn du {1} nicht bekommst?","Wer könnte dir {1} geben?"],["need"]),
+("ich kann nicht",50,["* ich kann nicht *"],["Warum kannst du nicht {1}?","Was hindert dich daran, {1}?","Hast du versucht, {1}?","Was wäre nötig, damit du {1} kannst?"],["blocker"]),
+("ich kann",35,["* ich kann *"],["Wie fühlt es sich an, dass du {1} kannst?","Würdest du gern häufiger {1}?","Was ermöglicht dir, {1} zu können?"],["ability"]),
+("ich muss",35,["* ich muss *"],["Warum musst du {1}?","Wer sagt, dass du {1} musst?","Was würde passieren, wenn du {1} nicht tust?"],["obligation"]),
+("ich sollte",35,["* ich sollte *"],["Warum solltest du {1}?","Ist das dein eigener Anspruch?","Was macht dieses Sollte mit dir?"],["obligation"]),
+("ich darf nicht",40,["* ich darf nicht *"],["Wer verbietet dir, {1}?","Was würde passieren, wenn du doch {1}?","Wie stehst du selbst zu diesem Verbot?"],["constraint"]),
+("ich denke",30,["* ich denke *"],["Warum denkst du {1}?","Wie sicher bist du dir, dass {1}?","Was wäre eine andere Sicht darauf?"],["cognition"]),
+("ich glaube",30,["* ich glaube *"],["Was lässt dich glauben, dass {1}?","Glaubst du das schon lange?","Wie würdest du prüfen, ob {1} stimmt?"],["cognition"]),
+("ich weiß",25,["* ich weiß *"],["Wie bist du zu diesem Wissen gekommen?","Was bedeutet es für dich, {1} zu wissen?","Bist du dir ganz sicher?"],["cognition"]),
+("ich weiß nicht",45,["* ich weiß nicht *"],["Was wäre eine erste Vermutung?","Was macht es schwer, das zu wissen?","Welche Antwort würdest du dir wünschen?"],["uncertainty"]),
+("ich erinnere mich",40,["* ich erinnere mich an *","* ich erinnere *"],["Warum erinnerst du dich gerade an {1}?","Welche Gefühle verbindet du mit {1}?","Kommt diese Erinnerung oft zurück?"],["memory"]),
+("ich träume",40,["* ich träume von *","* ich habe geträumt *"],["Was könnte {1} für dich bedeuten?","Welche Stimmung hatte dieser Traum?","Träumst du öfter von {1}?"],["dream"]),
+("ich hasse",45,["* ich hasse *"],["Was macht {1} so schwer für dich?","Seit wann empfindest du so gegenüber {1}?","Was würdest du dir stattdessen wünschen?"],["emotion"]),
+("ich liebe",35,["* ich liebe *"],["Was liebst du an {1}?","Wie zeigt sich diese Liebe?","Welche Bedeutung hat {1} in deinem Leben?"],["emotion"]),
+("ich vermisse",35,["* ich vermisse *"],["Was vermisst du an {1}?","Wann ist dir das besonders bewusst?","Was würde dir helfen, mit diesem Vermissen umzugehen?"],["loss"]),
+]
+for s in statement_patterns: add(*s)
+
+# You-directed statements
+you_rules = [
+("du bist",55,["* du bist *"],["Warum glaubst du, dass ich {1} bin?","Ist es wichtig für dich, ob ich {1} bin?","Vielleicht spricht das mehr über deine Erwartungen als über mich."],["transference"]),
+("du hast",50,["* du hast *"],["Warum sagst du, dass ich {1} habe?","Was würde es bedeuten, wenn ich {1} hätte?","Welche Rolle spielt das für dich?"],["transference"]),
+("du kannst",50,["* du kannst *"],["Warum interessiert dich, ob ich {1} kann?","Würdest du gern selbst {1} können?","Was erwartest du von mir?"],["transference"]),
+("du sollst",50,["* du sollst *","* du musst *"],["Warum möchtest du, dass ich {1}?","Was wäre anders, wenn ich {1}?","Welche Hilfe erwartest du genau?"],["transference"]),
+("du verstehst",45,["* du verstehst *"],["Was wäre für dich ein Zeichen, dass ich dich verstehe?","Fühlst du dich oft unverstanden?","Was sollte ich verstehen?"],["transference"]),
+("du hörst",35,["* du hörst *"],["Fühlst du dich gehört?","Was möchtest du, dass ich höre?","Wer hört dir sonst zu?"],["transference"]),
+("du denkst",35,["* du denkst *"],["Warum vermutest du, dass ich {1} denke?","Was denkst du selbst darüber?","Ist dir meine Einschätzung wichtig?"],["transference"]),
+]
+for y in you_rules: add(*y)
+
+# Family / relationship keywords
+family = {
+"mutter": ["Erzähl mir mehr über deine Mutter.","Wie ist dein Verhältnis zu deiner Mutter?","Welche Rolle spielt deine Mutter dabei?"],
+"vater": ["Erzähl mir mehr über deinen Vater.","Wie war oder ist dein Verhältnis zu deinem Vater?","Was verbindest du mit deinem Vater?"],
+"eltern": ["Wie erlebst du deine Eltern?","Welche Erwartungen deiner Eltern spürst du?","Was hast du von deinen Eltern übernommen?"],
+"familie": ["Erzähl mir mehr über deine Familie.","Welche Rolle spielt deine Familie dabei?","Gibt es wiederkehrende Muster in deiner Familie?"],
+"geschwister": ["Wie ist dein Verhältnis zu deinen Geschwistern?","Vergleichst du dich mit ihnen?","Welche Rolle hattest du unter deinen Geschwistern?"],
+"bruder": ["Was bedeutet dein Bruder für dich?","Wie ist euer Verhältnis?","Was beschäftigt dich an deinem Bruder?"],
+"schwester": ["Was bedeutet deine Schwester für dich?","Wie ist euer Verhältnis?","Was beschäftigt dich an deiner Schwester?"],
+"kind": ["Welche Bedeutung hat das Kind für dich?","Erinnert dich das an deine eigene Kindheit?","Was löst das Thema Kind in dir aus?"],
+"kinder": ["Was bedeuten Kinder für dich?","Welche Verantwortung spürst du dabei?","Wie beeinflussen Kinder deine Entscheidungen?"],
+"partner": ["Wie erlebst du deinen Partner oder deine Partnerin?","Was erwartest du in dieser Beziehung?","Was brauchst du in Partnerschaften?"],
+"partnerin": ["Wie erlebst du deine Partnerin?","Was wünschst du dir von ihr?","Was macht die Beziehung mit dir?"],
+"freund": ["Erzähl mir mehr über deinen Freund.","Welche Rolle spielt Freundschaft für dich?","Fühlst du dich unterstützt?"],
+"freundin": ["Erzähl mir mehr über deine Freundin.","Welche Rolle spielt diese Beziehung für dich?","Was brauchst du von ihr?"],
+"freunde": ["Wie wichtig sind dir Freunde?","Fühlst du dich von deinen Freunden verstanden?","Welche Freundschaft beschäftigt dich gerade?"],
+"kollege": ["Was beschäftigt dich an diesem Kollegen?","Wie ist eure Zusammenarbeit?","Was wünschst du dir beruflich im Umgang mit ihm?"],
+"kollegin": ["Was beschäftigt dich an dieser Kollegin?","Wie ist eure Zusammenarbeit?","Was wünschst du dir beruflich im Umgang mit ihr?"],
+"chef": ["Welche Rolle spielt dein Chef dabei?","Wie gehst du mit Autorität um?","Was würdest du deinem Chef gern sagen?"],
+"chefin": ["Welche Rolle spielt deine Chefin dabei?","Wie gehst du mit Autorität um?","Was würdest du deiner Chefin gern sagen?"],
+}
+for kw,res in family.items():
+    add(kw, 30, [f"* {kw} *"], res, ["relations"])
+
+# Work/life situations
+situations = {
+"arbeit": ["Was bedeutet Arbeit für dich?","Was belastet dich an der Arbeit?","Welche Anerkennung bekommst du dort?"],
+"job": ["Was beschäftigt dich an deinem Job?","Was würdest du gern verändern?","Wie viel Raum nimmt der Job in deinem Leben ein?"],
+"studium": ["Was beschäftigt dich im Studium?","Welche Erwartungen spürst du dort?","Was macht dir im Studium Druck?"],
+"schule": ["Was verbindest du mit Schule?","Welche Erfahrungen in der Schule wirken nach?","Was passiert gerade in der Schule?"],
+"prüfung": ["Was bedeutet diese Prüfung für dich?","Wovor hast du bei der Prüfung Angst?","Wie bereit fühlst du dich?"],
+"projekt": ["Welche Rolle spielt dieses Projekt für dich?","Was macht das Projekt schwierig?","Was wäre ein guter nächster Schritt?"],
+"geld": ["Welche Sorgen verbindest du mit Geld?","Was bedeutet Sicherheit für dich?","Wie beeinflusst Geld deine Entscheidungen?"],
+"gesundheit": ["Wie geht es dir gesundheitlich?","Welche Sorgen hast du um deine Gesundheit?","Was sagt dein Körper dir gerade?"],
+"krank": ["Was macht Kranksein mit dir?","Fühlst du dich gut versorgt?","Was brauchst du, wenn du krank bist?"],
+"schlaf": ["Wie schläfst du im Moment?","Was hält dich wach?","Was passiert kurz bevor du schlafen gehst?"],
+"essen": ["Welche Rolle spielt Essen für dich?","Verändert sich dein Essverhalten, wenn es dir schlecht geht?","Was verbindest du mit Essen?"],
+"zeit": ["Wie erlebst du Zeit im Moment?","Hast du das Gefühl, genug Zeit zu haben?","Wofür fehlt dir Zeit?"],
+"zukunft": ["Wie stellst du dir die Zukunft vor?","Was macht dir an der Zukunft Sorgen?","Was wünschst du dir für die Zukunft?"],
+"vergangenheit": ["Welche Vergangenheit beschäftigt dich?","Was wirkt aus der Vergangenheit nach?","Was würdest du heute anders sehen?"],
+"entscheidung": ["Was macht die Entscheidung schwierig?","Welche Optionen siehst du?","Was wäre, wenn du dich nicht sofort entscheiden müsstest?"],
+"problem": ["Was ist der Kern des Problems?","Seit wann besteht dieses Problem?","Was hast du schon versucht?"],
+"konflikt": ["Worum geht es in diesem Konflikt wirklich?","Welche Seite von dir ist im Konflikt?","Was wäre eine faire Lösung?"],
+"stress": ["Was verursacht den Stress?","Wie merkst du, dass es zu viel wird?","Was könnte den Stress etwas verringern?"],
+"pause": ["Was würde eine Pause dir geben?","Erlaubst du dir Pausen?","Was passiert, wenn du eine Pause machst?"],
+}
+for kw,res in situations.items():
+    add(kw, 22, [f"* {kw} *"], res, ["situation"])
+
+# Logical connectors/questions
+logic_rules = [
+("weil",20,["* weil *"],["Ist das der einzige Grund?","Welche weiteren Gründe könnte es geben?","Erklärt das wirklich alles?","Was wäre, wenn dieser Grund nicht stimmt?"],["reason"]),
+("aber",15,["* aber *"],["Was steht auf der anderen Seite dieses Aber?","Welche Spannung steckt darin?","Was wäre ohne dieses Aber?"],["contrast"]),
+("immer",18,["* immer *"],["Wirklich immer?","Gibt es Ausnahmen?","Kannst du ein konkretes Beispiel nennen?"],["generalization"]),
+("nie",18,["* nie *"],["Wirklich nie?","Gab es keine einzige Ausnahme?","Was macht dieses Nie so stark?"],["generalization"]),
+("alle",15,["* alle *"],["Meinst du wirklich alle?","Wer genau ist damit gemeint?","Gibt es Gegenbeispiele?"],["generalization"]),
+("niemand",15,["* niemand *"],["Wirklich niemand?","Wer könnte eine Ausnahme sein?","Wie fühlt es sich an, das so absolut zu erleben?"],["generalization"]),
+("jeder",15,["* jeder *"],["Meinst du tatsächlich jeder?","Was macht diese Verallgemeinerung für dich plausibel?","Gibt es Ausnahmen?"],["generalization"]),
+("warum",35,["* warum *"],["Welche Antwort vermutest du selbst?","Was würde dir eine Antwort geben?","Warum ist diese Warum-Frage wichtig?"],["question"]),
+("wie",20,["* wie *"],["Welche Möglichkeiten siehst du selbst?","Was wäre ein erster kleiner Schritt?","Wie würdest du es jemand anderem erklären?"],["question"]),
+("was",20,["* was *"],["Was meinst du selbst?","Welche Antwort liegt nahe?","Was wäre die wichtigste Klärung?"],["question"]),
+("wann",20,["* wann *"],["Welche Zeit fühlt sich richtig an?","Was müsste vorher passieren?","Gibt es einen bestimmten Auslöser?"],["question"]),
+("wer",20,["* wer *"],["An wen denkst du dabei?","Welche Person ist wichtig?","Wer beeinflusst diese Situation?"],["question"]),
+("vielleicht",15,["* vielleicht *"],["Du wirkst unsicher.","Was spricht dafür und was dagegen?","Was würde aus Vielleicht ein Ja oder Nein machen?"],["uncertainty"]),
+("ja",5,["ja","* ja *"],["Du klingst dir recht sicher.","Kannst du das genauer erklären?","Warum ja?"],["yesno"]),
+("nein",5,["nein","* nein *"],["Warum nicht?","Was spricht dagegen?","Bist du dir sicher?"],["yesno"]),
+]
+for l in logic_rules: add(*l)
+
+# Therapy/ELIZA classic themes
+classic = {
+"traum": ["Was bedeutet dieser Traum für dich?","Träume können vieles ausdrücken. Welche Gefühle waren darin?","Erinnert dich der Traum an etwas?"],
+"albtraum": ["Was war das Beängstigende an diesem Albtraum?","Hast du solche Albträume häufiger?","Was blieb nach dem Aufwachen zurück?"],
+"erinnerung": ["Welche Erinnerung kommt dir in den Sinn?","Warum ist diese Erinnerung gerade wichtig?","Welche Gefühle verbindet du damit?"],
+"kindheit": ["Erzähl mir mehr über deine Kindheit.","Welche Erfahrungen aus der Kindheit wirken heute noch?","Wie hast du dich damals gefühlt?"],
+"schuld": ["Wer gibt dir Schuld?","Wofür fühlst du dich verantwortlich?","Ist Schuld hier hilfreich oder hinderlich?"],
+"scham": ["Was macht dir Scham?","Vor wem schämst du dich?","Was wäre ein freundlicher Blick auf dich selbst?"],
+"kontrolle": ["Was möchtest du kontrollieren?","Was passiert, wenn du die Kontrolle verlierst?","Wie viel Kontrolle brauchst du?"],
+"freiheit": ["Was bedeutet Freiheit für dich?","Wovon möchtest du frei sein?","Was würdest du mit mehr Freiheit tun?"],
+"liebe": ["Was bedeutet Liebe für dich?","Fühlst du dich geliebt?","Wie zeigst du Liebe?"],
+"hass": ["Was macht diesen Hass so stark?","Welche Verletzung steckt vielleicht dahinter?","Was würde den Hass kleiner machen?"],
+"tod": ["Das klingt sehr ernst. Welche Gedanken verbindest du damit?","Was löst das Thema Tod in dir aus?","Mit wem kannst du darüber sprechen?"],
+"leben": ["Was bedeutet Leben für dich?","Was gibt deinem Leben Bedeutung?","Was fehlt dir im Leben?"],
+"sinn": ["Wo suchst du Sinn?","Was hat dir früher Sinn gegeben?","Was wäre ein kleiner sinnvoller Moment?"],
+"vertrauen": ["Wem vertraust du?","Was macht Vertrauen für dich schwer?","Woran merkst du, dass du vertrauen kannst?"],
+"misstrauen": ["Was macht dich misstrauisch?","Gab es Erfahrungen, die dazu geführt haben?","Was bräuchtest du, um Vertrauen aufzubauen?"],
+}
+for kw,res in classic.items():
+    add(kw, 24, [f"* {kw} *"], res, ["classic"])
+
+# Technology/computer classic
+tech = {
+"computer": ["Warum sprichst du über Computer?","Machen Computer dir Sorgen?","Welche Rolle spielt Technik für dich?"],
+"maschine": ["Fühlst du dich manchmal wie eine Maschine?","Was unterscheidet Menschen und Maschinen für dich?","Warum erwähnst du Maschinen?"],
+"ki": ["Was denkst du über künstliche Intelligenz?","Vertraust du KI-Systemen?","Welche Gefühle löst KI bei dir aus?"],
+"chatbot": ["Was erwartest du von einem Chatbot?","Wie fühlt es sich an, mit einem Chatbot zu sprechen?","Glaubst du, dass ein Chatbot verstehen kann?"],
+"algorithmus": ["Welche Rolle spielt der Algorithmus für dich?","Fühlst du dich durch Algorithmen beeinflusst?","Was macht dir daran Sorgen?"],
+"internet": ["Welche Rolle spielt das Internet in deinem Leben?","Hilft es dir oder belastet es dich?","Was suchst du dort?"],
+"handy": ["Welche Bedeutung hat dein Handy für dich?","Fühlst du dich davon abhängig?","Was passiert, wenn du es weglegst?"],
+}
+for kw,res in tech.items():
+    add(kw, 18, [f"* {kw} *"], res, ["technology"])
+
+# Modal patterns and commands
+modal = [
+("kannst du",35,["* kannst du *"],["Warum möchtest du, dass ich {1}?","Was würde dir das helfen?","Was erwartest du von mir dabei?"],["request"]),
+("soll ich",35,["* soll ich *"],["Was würdest du selbst tun wollen?","Welche Konsequenzen hätte es, wenn du {1}?","Was spricht dafür und dagegen?"],["decision"]),
+("muss ich",35,["* muss ich *"],["Wer sagt, dass du {1} musst?","Was passiert, wenn du {1} nicht tust?","Fühlt es sich nach Pflicht oder Wunsch an?"],["obligation"]),
+("darf ich",30,["* darf ich *"],["Von wem brauchst du Erlaubnis?","Was würde es bedeuten, wenn du {1} darfst?","Was hält dich zurück?"],["permission"]),
+("hilf mir",40,["* hilf mir *","* kannst du mir helfen *"],["Welche Hilfe brauchst du genau?","Was wäre ein erster hilfreicher Schritt?","Wobei fühlst du dich allein?"],["help"]),
+("ich brauche hilfe",45,["* ich brauche hilfe *"],["Wobei brauchst du Hilfe?","Wer könnte dich zusätzlich unterstützen?","Was wäre jetzt am dringendsten?"],["help"]),
+]
+for m in modal: add(*m)
+
+# More specific concern keywords to reach ~200
+more_keywords = {
+"aufgeben": ["Was bringt dich dazu, ans Aufgeben zu denken?","Was wäre, wenn du noch einen kleinen Schritt probierst?","Was hast du bisher schon geschafft?"],
+"scheitern": ["Was bedeutet Scheitern für dich?","Wovor hast du beim Scheitern Angst?","Ist Scheitern hier wirklich endgültig?"],
+"erfolg": ["Was bedeutet Erfolg für dich?","Woran würdest du Erfolg erkennen?","Ist das dein eigener Maßstab?"],
+"perfekt": ["Was bedeutet perfekt für dich?","Wer erwartet Perfektion?","Was wäre gut genug?"],
+"fehler": ["Wie gehst du mit Fehlern um?","Was macht diesen Fehler so bedeutsam?","Was könntest du aus ihm lernen?"],
+"kritik": ["Wie wirkt Kritik auf dich?","Welche Kritik trifft dich besonders?","Was wäre konstruktive Kritik?"],
+"lob": ["Wie nimmst du Lob an?","Fällt es dir leicht, Lob zu glauben?","Was bedeutet Anerkennung für dich?"],
+"anerkennung": ["Welche Anerkennung wünschst du dir?","Von wem brauchst du Anerkennung?","Was passiert, wenn Anerkennung ausbleibt?"],
+"ablehnung": ["Was macht Ablehnung mit dir?","Von wem fühlst du dich abgelehnt?","Welche Angst steckt darin?"],
+"verlust": ["Was hast du verloren?","Wie gehst du mit Verlust um?","Was bleibt trotz des Verlusts?"],
+"trennung": ["Was bedeutet diese Trennung für dich?","Was vermisst du?","Was verändert sich dadurch?"],
+"streit": ["Worum ging es in dem Streit?","Was wurde nicht ausgesprochen?","Was würdest du heute anders sagen?"],
+"lüge": ["Welche Rolle spielt diese Lüge?","Was macht Wahrheit hier schwierig?","Wem gegenüber ist Ehrlichkeit wichtig?"],
+"wahrheit": ["Welche Wahrheit meinst du?","Ist sie schwer auszusprechen?","Was würde passieren, wenn sie gesagt wird?"],
+"vertrauen": ["Was macht Vertrauen möglich?","Wer hat dein Vertrauen erschüttert?","Was bräuchte es, um Vertrauen aufzubauen?"],
+"verantwortung": ["Welche Verantwortung trägst du?","Ist das alles deine Verantwortung?","Was könntest du abgeben?"],
+"pflicht": ["Welche Pflicht spürst du?","Wer erwartet das von dir?","Wie unterscheidest du Pflicht und Wunsch?"],
+"druck": ["Woher kommt der Druck?","Was macht dieser Druck mit dir?","Was würde ihn reduzieren?"],
+"ruhe": ["Was gibt dir Ruhe?","Wann hast du zuletzt Ruhe gespürt?","Was stört deine Ruhe?"],
+"chaos": ["Was fühlt sich chaotisch an?","Welche Ordnung würdest du dir wünschen?","Was wäre ein kleiner sortierender Schritt?"],
+"ordnung": ["Was bedeutet Ordnung für dich?","Hilft dir Ordnung oder setzt sie dich unter Druck?","Wo brauchst du mehr Ordnung?"],
+"mut": ["Wofür brauchst du Mut?","Wann warst du schon einmal mutig?","Was würde dir Mut geben?"],
+"hoffnung": ["Was gibt dir Hoffnung?","Wann war Hoffnung zuletzt spürbar?","Wie könntest du Hoffnung stärken?"],
+"zweifel": ["Woran zweifelst du?","Was nährt diese Zweifel?","Was würde den Zweifel kleiner machen?"],
+"neid": ["Worauf bist du neidisch?","Welcher Wunsch steckt im Neid?","Was zeigt dir dieser Neid über deine Bedürfnisse?"],
+"freude": ["Was bereitet dir Freude?","Wie oft erlebst du diese Freude?","Was könnte mehr Freude bringen?"],
+"körper": ["Was spürst du körperlich?","Wie reagiert dein Körper auf die Situation?","Was sagt dein Körper dir?"],
+"kopf": ["Was geht dir durch den Kopf?","Kreisen deine Gedanken?","Was würde deinen Kopf entlasten?"],
+"herz": ["Was sagt dein Herz dazu?","Welche Gefühle liegen darunter?","Was berührt dich daran?"],
+"bauchgefühl": ["Was sagt dein Bauchgefühl?","Vertraust du diesem Gefühl?","Wann hat dein Bauchgefühl dich schon geführt?"],
+"grenze": ["Welche Grenze wurde überschritten?","Welche Grenze möchtest du setzen?","Was macht Grenzen schwer?"],
+"nein sagen": ["Wem möchtest du Nein sagen?","Was macht Nein sagen schwer?","Was würde ein klares Nein schützen?"],
+"ja sagen": ["Wozu möchtest du Ja sagen?","Ist dieses Ja freiwillig?","Was verändert sich durch dein Ja?"],
+"veränderung": ["Welche Veränderung wünschst du dir?","Was macht Veränderung schwer?","Was wäre ein erster kleiner Schritt?"],
+"anfang": ["Was beginnt gerade?","Wie fühlt sich dieser Anfang an?","Was brauchst du für diesen Anfang?"],
+"ende": ["Was endet gerade?","Wie gehst du mit Enden um?","Was bleibt nach dem Ende?"],
+"chance": ["Welche Chance siehst du?","Was bräuchtest du, um sie zu nutzen?","Was macht dir daran Angst?"],
+"risiko": ["Welches Risiko siehst du?","Wie groß ist dieses Risiko wirklich?","Was wäre ein sicherer Versuch?"],
+"wahl": ["Welche Wahl hast du?","Fühlt es sich wirklich wie eine Wahl an?","Welche Option entspricht dir am meisten?"],
+"option": ["Welche Optionen siehst du?","Welche Option vermeidest du?","Was wäre eine mutige Option?"],
+"plan": ["Welchen Plan hast du?","Was fehlt dem Plan noch?","Wie flexibel ist dieser Plan?"],
+"ziel": ["Welches Ziel verfolgst du?","Ist es dein eigenes Ziel?","Was wäre ein kleiner Schritt zum Ziel?"],
+"wunsch": ["Welchen Wunsch meinst du?","Wie lange hast du diesen Wunsch schon?","Was hält dich von diesem Wunsch ab?"],
+"bedürfnis": ["Welches Bedürfnis steckt dahinter?","Wird dieses Bedürfnis gesehen?","Wie könntest du es ausdrücken?"],
+"sehnsucht": ["Wonach sehnst du dich?","Was fehlt dir besonders?","Wie gehst du mit dieser Sehnsucht um?"],
+"einsicht": ["Welche Einsicht ist dir gekommen?","Was verändert diese Einsicht?","Wie fühlt sich diese Einsicht an?"],
+"verstehen": ["Was möchtest du verstehen?","Was wäre anders, wenn du es verstehst?","Wer sollte dich verstehen?"],
+"missverstanden": ["Von wem fühlst du dich missverstanden?","Was wird nicht gesehen?","Wie könntest du es anders ausdrücken?"],
+"allein": ["Fühlst du dich allein?","Wann ist dieses Alleinsein besonders stark?","Wer könnte dir nahe sein?"],
+"gemeinsam": ["Mit wem möchtest du gemeinsam handeln?","Was bedeutet Gemeinsamkeit für dich?","Fühlst du dich getragen?"],
+"nähe": ["Welche Nähe wünschst du dir?","Was macht Nähe schwierig?","Wann fühlt sich Nähe sicher an?"],
+"distanz": ["Welche Distanz brauchst du?","Was schützt diese Distanz?","Von wem möchtest du Abstand?"],
+"kontakt": ["Welchen Kontakt wünschst du dir?","Was macht Kontaktaufnahme schwierig?","Was wäre eine kleine Kontaktaufnahme?"],
+"gespräch": ["Was sollte in diesem Gespräch gesagt werden?","Mit wem möchtest du sprechen?","Was hindert dich daran?"],
+"schweigen": ["Was steckt in diesem Schweigen?","Was wird nicht ausgesprochen?","Ist Schweigen Schutz oder Belastung?"],
+"frage": ["Welche Frage beschäftigt dich?","Was wäre eine ehrliche Antwort?","Warum gerade diese Frage?"],
+"antwort": ["Welche Antwort suchst du?","Was wäre eine hilfreiche Antwort?","Hast du schon eine Vermutung?"],
+"klarheit": ["Worin brauchst du Klarheit?","Was ist noch unklar?","Was wäre ein klärender Schritt?"],
+"verwirrt": ["Was verwirrt dich?","Welche Teile passen nicht zusammen?","Was wäre der einfachste Punkt zum Sortieren?"],
+"müde": ["Wovon bist du müde?","Ist es körperliche oder emotionale Müdigkeit?","Was würde dich erholen?"],
+"erschöpft": ["Was hat dich erschöpft?","Wie lange hält diese Erschöpfung an?","Was bräuchtest du zur Regeneration?"],
+"energie": ["Was gibt dir Energie?","Was raubt dir Energie?","Wie ist dein Energielevel gerade?"],
+"motivation": ["Was motiviert dich?","Was fehlt deiner Motivation?","Ist das Ziel wirklich deins?"],
+"prokrastination": ["Was schiebst du auf?","Welche Angst steckt im Aufschieben?","Was wäre ein winziger Anfang?"],
+"langweile": ["Was langweilt dich?","Welche Anregung fehlt dir?","Ist Langeweile vielleicht ein Signal?"],
+"überraschung": ["Was hat dich überrascht?","Warum war das unerwartet?","Was verändert diese Überraschung?"],
+"enttäuschung": ["Wovon bist du enttäuscht?","Welche Erwartung wurde nicht erfüllt?","Was brauchst du nach dieser Enttäuschung?"],
+"erwartung": ["Welche Erwartung meinst du?","Ist es deine Erwartung oder die anderer?","Was passiert, wenn sie nicht erfüllt wird?"],
+"vergleich": ["Mit wem vergleichst du dich?","Was macht dieser Vergleich mit dir?","Ist der Vergleich fair?"],
+"identität": ["Was bedeutet das für dein Selbstbild?","Wer möchtest du sein?","Welche Rolle spielt Identität hier?"],
+"rolle": ["Welche Rolle nimmst du ein?","Passt diese Rolle zu dir?","Welche Rolle würdest du gern ablegen?"],
+"maske": ["Welche Maske trägst du?","Was verbirgst du dahinter?","Wann kannst du ohne Maske sein?"],
+"authentisch": ["Wann fühlst du dich authentisch?","Was hindert dich daran, authentisch zu sein?","Wer kennt dich authentisch?"],
+"wert": ["Was ist dir wertvoll?","Woran misst du deinen Wert?","Ist dein Wert an Leistung gebunden?"],
+"leistung": ["Welche Rolle spielt Leistung für dich?","Fühlst du dich über Leistung bewertet?","Was wärst du ohne Leistung?"],
+"pause": ["Erlaubst du dir Pausen?","Was passiert, wenn du innehältst?","Welche Pause brauchst du?"],
+"urlaub": ["Was bedeutet Urlaub für dich?","Kannst du wirklich abschalten?","Was müsste passieren, damit du dich erholst?"],
+"heimat": ["Was bedeutet Heimat für dich?","Wo fühlst du dich zuhause?","Hat sich dein Gefühl von Heimat verändert?"],
+"zuhause": ["Was bedeutet Zuhause für dich?","Fühlst du dich zuhause sicher?","Was macht einen Ort zu deinem Zuhause?"],
+"ort": ["Welche Bedeutung hat dieser Ort?","Was verbindest du mit diesem Ort?","Wie fühlst du dich dort?"],
+"weggehen": ["Wovon möchtest du weggehen?","Was hält dich noch dort?","Wohin würdest du gehen?"],
+"bleiben": ["Warum möchtest du bleiben?","Was hält dich fest?","Was wäre der Preis des Bleibens?"],
+"anfangen": ["Womit möchtest du anfangen?","Was wäre der kleinste Anfang?","Was macht den Anfang schwer?"],
+"loslassen": ["Was möchtest du loslassen?","Was macht Loslassen schwer?","Was würdest du gewinnen, wenn du loslässt?"],
+"festhalten": ["Woran hältst du fest?","Was gibt dir dieses Festhalten?","Was würde passieren, wenn du loslässt?"],
+"warten": ["Worauf wartest du?","Was hält dich im Warten?","Was könntest du währenddessen tun?"],
+"geduld": ["Wie leicht fällt dir Geduld?","Wobei brauchst du Geduld?","Was passiert, wenn du ungeduldig wirst?"],
+"ungeduldig": ["Was macht dich ungeduldig?","Was soll schneller gehen?","Was wäre ein realistischer Rhythmus?"],
+"kontrollieren": ["Was möchtest du kontrollieren?","Was wäre, wenn du weniger kontrollierst?","Welche Unsicherheit steckt dahinter?"],
+"los": ["Was möchtest du loswerden?","Was hängt daran?","Was würde danach frei werden?"],
+"fest": ["Was fühlt sich festgefahren an?","Was hält dich fest?","Wo gäbe es Bewegung?"],
+"blockiert": ["Was blockiert dich?","Wo spürst du die Blockade?","Was wäre ein kleiner Umweg?"],
+"offen": ["Wofür bist du offen?","Was macht Offenheit möglich?","Welche Grenze bleibt trotzdem wichtig?"],
+"geschlossen": ["Was verschließt sich?","Wovor schützt dich das?","Was könnte sich vorsichtig öffnen?"],
+"vertrauen": ["Was macht Vertrauen für dich möglich?","Wem vertraust du im Moment?","Was hat Vertrauen erschüttert?"],
+}
+for kw,res in more_keywords.items():
+    add(kw, 16, [f"* {kw} *"], res, ["extended"])
+
+# Add catch-all high-level syntactic rules near bottom
+syntax_rules = [
+("fragezeichen",2,["* ?"],["Was vermutest du selbst?","Warum ist dir diese Frage wichtig?","Welche Antwort würdest du befürchten?"],["fallback_question"]),
+("ausruf",2,["* !"],["Das klingt nach starker Emotion.","Was macht das so dringend?","Welche Gefühle stecken in diesem Ausruf?"],["fallback_emphasis"]),
+("standard",0,["*"],defaults,["fallback"])
+]
+for r in syntax_rules: add(*r)
+
+enrich_patterns_for_coverage(rules)
+enrich_rules_for_variety(rules)
+
+# Trim or leave if >=200. We'll keep exact first 205-ish if too many? User asked ~200.
+# Let's make it exactly 202 rules: preserve all created up to 202, ensuring fallback remains last.
+fallback_rule = rules[-1]
+rules_no_fallback = rules[:-1]
+target_total = 202
+rules = rules_no_fallback[:target_total-1] + [fallback_rule]
+# renumber
+for i, rule in enumerate(rules, 1):
+    rule["id"] = f"de_eliza_{i:03d}"
+
+data = {
+    "name": "de_eliza_doctor_rules",
+    "version": "1.0.0",
+    "language": "de",
+    "description": "Deutscher ELIZA/DOCTOR-artiger Regelsatz mit ca. 200 Regeln, Prioritäten, Pattern-Matching und optimierter Pronomen-Reflection.",
+    "matching_notes": {
+        "pattern_syntax": "Sternchen (*) markieren beliebige Textsegmente. Gefundene Segmente können in responses als {1}, {2}, ... eingesetzt werden.",
+        "processing_order": [
+            "Input normalisieren: Kleinschreibung, Satzzeichen optional trennen",
+            "Keyword-Regeln suchen",
+            "höchsten rank bevorzugen",
+            "innerhalb einer Regel erstes passendes pattern nutzen",
+            "extrahierte Segmente über reflections spiegeln",
+            "zufällige response wählen",
+            "falls nichts passt: standard/fallback"
+        ],
+        "warning": "ELIZA simuliert Gespräch, ersetzt aber keine Beratung, Psychotherapie oder Krisenintervention."
+    },
+    "reflections": reflections,
+    "memory_triggers": memory_triggers,
+    "defaults": defaults,
+    "rules": rules
+}
+
+path = Path("/mnt/data/de_eliza_rules_200.json")
+path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+len(rules), path.as_posix()

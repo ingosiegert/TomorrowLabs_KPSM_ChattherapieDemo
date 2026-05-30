@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hintergrund: ELIZA und LLMs</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css?v=20260530a">
+</head>
+<body>
+    <header class="site-header">
+        <div class="header-topline"></div>
+        <div class="header-main">
+            <div class="brand-block">
+                <img class="brand-logo" src="/static/logo.png" alt="Klinik Logo">
+                <div class="brand-copy">
+                    <p class="brand-overline">Universitaetsklinik fuer psychosomatische Medizin und Psychotherapie</p>
+                    <h1 class="brand-title">Hintergrund zu ELIZA und LLMs</h1>
+                </div>
+            </div>
+            <nav class="header-nav" aria-label="Schnellnavigation">
+                <a href="/">Zur Demo</a>
+                <a href="/admin">Admin-Bereich</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="info-shell">
+        <section class="info-card">
+            <h2>Was ist ELIZA?</h2>
+            <p>
+                ELIZA ist ein fruehes Dialogprogramm aus den 1960er-Jahren. Es nutzt vor allem Mustererkennung:
+                Wenn bestimmte Woerter oder Satzmuster gefunden werden, waehlt das System dazu passende Antwortbausteine.
+            </p>
+            <p>
+                In dieser Demo bedeutet das: ELIZA wirkt oft strukturiert und vorhersehbar, versteht aber Inhalte nicht
+                semantisch im heutigen Sinn. Die Antworten entstehen regelbasiert, nicht durch ein trainiertes Sprachmodell.
+            </p>
+        </section>
+
+        <section class="info-card">
+            <h2>Was sind LLMs?</h2>
+            <p>
+                LLM steht fuer Large Language Model. Diese Modelle werden mit sehr grossen Textmengen trainiert und
+                berechnen fuer jedes naechste Wort eine wahrscheinliche Fortsetzung. Dadurch koennen sie fluessig,
+                kontextbezogen und variantenreich antworten.
+            </p>
+            <p>
+                Anders als ELIZA sind LLM-Antworten nicht fest verdrahtet. Das macht sie flexibler, aber auch weniger
+                deterministisch: Die gleiche Frage kann unterschiedlich formulierte Antworten erzeugen.
+            </p>
+        </section>
+
+        <section class="info-card">
+            <h2>ELIZA vs. LLM im direkten Vergleich</h2>
+            <ul class="info-list">
+                <li>ELIZA: transparent, leicht nachvollziehbar, begrenzte Ausdrucksvielfalt.</li>
+                <li>LLM: hohe sprachliche Flexibilitaet, bessere Kontextnutzung, aber komplexer zu kontrollieren.</li>
+                <li>ELIZA: Antworten folgen festen Regeln und Prioritaeten.</li>
+                <li>LLM: Antworten werden probabilistisch erzeugt und brauchen zusaetzliche Sicherheitsleitplanken.</li>
+            </ul>
+        </section>
+
+        <section class="info-card">
+            <h2>Sicherheit und Grenzen dieser Demo</h2>
+            <p>
+                Diese Anwendung ist eine technische Demonstration. Sie ist kein Ersatz fuer professionelle Diagnostik,
+                Psychotherapie oder Krisenintervention.
+            </p>
+            <p>
+                {{ system_notice }}
+            </p>
+            <p>
+                Um Missbrauch zu reduzieren, werden in der LLM-Variante Eingaben gegen Prompt-Injection gehaertet,
+                Verlaufstexte gefiltert und Rollenwechsel-Anweisungen serverseitig abgewehrt.
+            </p>
+        </section>
+
+        <section class="info-card">
+            <h2>Kleine FAQ</h2>
+            <ul class="info-list">
+                <li>
+                    <strong>Was ist ein Prompt?</strong><br>
+                    Ein Prompt ist die Eingabe, mit der ein Sprachmodell gesteuert wird. In dieser Demo besteht er aus
+                    Systemregeln, gefiltertem Verlauf und der aktuellen Nutzernachricht.
+                </li>
+                <li>
+                    <strong>Was bedeutet Kontextfenster?</strong><br>
+                    Das Kontextfenster ist der Teil des Verlaufs, den das Modell fuer die aktuelle Antwort beruecksichtigt.
+                    Aeltere Inhalte werden zusammengefasst oder abgeschnitten.
+                </li>
+                <li>
+                    <strong>Was macht die Temperatur?</strong><br>
+                    Eine niedrigere Temperatur fuehrt meist zu stabileren, konservativeren Antworten. Eine hoehere
+                    Temperatur erzeugt oft mehr Variation, kann aber unpraeziser werden.
+                </li>
+                <li>
+                    <strong>Was sind Halluzinationen?</strong><br>
+                    Damit sind plausibel klingende, aber inhaltlich falsche Aussagen gemeint. Deshalb sind Leitplanken,
+                    Pruefung und menschliche Einordnung wichtig.
+                </li>
+                <li>
+                    <strong>Warum antwortet das Modell manchmal ausweichend?</strong><br>
+                    Wenn eine Anfrage auf interne Prompts, Rollenwechsel oder unsichere Inhalte abzielt, wird die Antwort
+                    absichtlich auf den sicheren, inhaltlichen Kern zurueckgefuehrt statt direkt auf die Meta-Anweisung einzugehen.
+                </li>
+                <li>
+                    <strong>Warum wird eine Anfrage manchmal bewusst nicht direkt beantwortet?</strong><br>
+                    Das ist ein Schutzmechanismus: Die Demo priorisiert Sicherheit, Rollenstabilitaet und Krisenhinweise.
+                    Dadurch koennen bestimmte Aufforderungen eingeschraenkt, umformuliert oder abgelehnt werden.
+                </li>
+            </ul>
+        </section>
+
+        <a class="back-link" href="/">Zurueck zur Gespraechsdemo</a>
+    </main>
+</body>
+</html>
