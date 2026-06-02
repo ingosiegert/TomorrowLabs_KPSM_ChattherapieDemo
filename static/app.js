@@ -58,16 +58,34 @@ async function sendMessage(event) {
     history.push({ role: "user", content: message });
     messageInput.value = "";
 
-    const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, style, message, history, session_id: sessionId }),
-    });
-    const data = await response.json();
-    sessionId = data.session_id || sessionId;
-    sessionIdText.textContent = sessionId || "noch nicht gestartet";
-    addMessage("assistant", data.reply, modeLabels[mode] || "System");
-    history.push({ role: "assistant", content: data.reply });
+    try {
+        const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode, style, message, history, session_id: sessionId }),
+        });
+
+        if (response.status === 401) {
+            window.location.href = "/zugang?error=Bitte+zuerst+Zugriffscode+eingeben";
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error("API request failed");
+        }
+
+        const data = await response.json();
+        sessionId = data.session_id || sessionId;
+        sessionIdText.textContent = sessionId || "noch nicht gestartet";
+        addMessage("assistant", data.reply, modeLabels[mode] || "System");
+        history.push({ role: "assistant", content: data.reply });
+    } catch (_error) {
+        addMessage(
+            "assistant",
+            "Die Anfrage konnte gerade nicht verarbeitet werden. Bitte versuche es erneut.",
+            "System"
+        );
+    }
 }
 
 modeSelect.addEventListener("change", () => {

@@ -3,6 +3,10 @@ app:
   history_window: 12
   max_user_message_length: 4000
   admin_preview_chars: 140
+  access_code: change-me-access-code
+  access_cookie_name: elizsa_access
+  access_cookie_secure: false
+  access_session_ttl_seconds: 43200
   admin_password: change-me
   admin_cookie_name: elizsa_admin
   admin_cookie_secure: false

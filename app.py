@@ -46,6 +46,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "history_window": 12,
         "max_user_message_length": 4000,
         "admin_preview_chars": 140,
+        "access_code": "",
+        "access_cookie_name": "elizsa_access",
+        "access_cookie_secure": False,
+        "access_session_ttl_seconds": 43200,
         "admin_password": "change-me",
         "admin_cookie_name": "elizsa_admin",
         "admin_cookie_secure": False,
@@ -373,9 +377,27 @@ def admin_cookie_name(config: dict[str, Any]) -> str:
     return str(config.get("app", {}).get("admin_cookie_name", "elizsa_admin"))
 
 
+def access_code_value(config: dict[str, Any]) -> str:
+    return str(config.get("app", {}).get("access_code", "")).strip()
+
+
+def access_protection_enabled(config: dict[str, Any]) -> bool:
+    return bool(access_code_value(config))
+
+
+def access_cookie_name(config: dict[str, Any]) -> str:
+    return str(config.get("app", {}).get("access_cookie_name", "elizsa_access"))
+
+
 def _admin_signature(timestamp: int, config: dict[str, Any]) -> str:
     secret = str(config.get("app", {}).get("admin_secret", "change-this-secret"))
     digest = hmac.new(secret.encode("utf-8"), f"admin:{timestamp}".encode("utf-8"), hashlib.sha256).hexdigest()
+    return digest
+
+
+def _access_signature(timestamp: int, config: dict[str, Any]) -> str:
+    secret = str(config.get("app", {}).get("admin_secret", "change-this-secret"))
+    digest = hmac.new(secret.encode("utf-8"), f"access:{timestamp}".encode("utf-8"), hashlib.sha256).hexdigest()
     return digest
 
 
@@ -399,11 +421,52 @@ def validate_admin_token(token: str, config: dict[str, Any]) -> bool:
     return hmac.compare_digest(provided_sig, expected_sig)
 
 
+def issue_access_token(config: dict[str, Any]) -> str:
+    ts = int(time.time())
+    payload = f"{ts}:{_access_signature(ts, config)}"
+    return base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii")
+
+
+def validate_access_token(token: str, config: dict[str, Any]) -> bool:
+    try:
+        decoded = base64.urlsafe_b64decode(token.encode("ascii")).decode("utf-8")
+        ts_str, provided_sig = decoded.split(":", 1)
+        ts = int(ts_str)
+    except (ValueError, UnicodeDecodeError):
+        return False
+    ttl = int(config.get("app", {}).get("access_session_ttl_seconds", 43200))
+    if int(time.time()) - ts > ttl:
+        return False
+    expected_sig = _access_signature(ts, config)
+    return hmac.compare_digest(provided_sig, expected_sig)
+
+
 def admin_authenticated(request: Request, config: dict[str, Any]) -> bool:
     token = request.cookies.get(admin_cookie_name(config))
     if not token:
         return False
     return validate_admin_token(token, config)
+
+
+def access_authenticated(request: Request, config: dict[str, Any]) -> bool:
+    if not access_protection_enabled(config):
+        return True
+    token = request.cookies.get(access_cookie_name(config))
+    if not token:
+        return False
+    return validate_access_token(token, config)
+
+
+def require_access_or_redirect(request: Request, config: dict[str, Any]) -> RedirectResponse | None:
+    if access_authenticated(request, config):
+        return None
+    return RedirectResponse(url="/zugang", status_code=302)
+
+
+def require_access_or_unauthorized(request: Request, config: dict[str, Any]) -> JSONResponse | None:
+    if access_authenticated(request, config):
+        return None
+    return JSONResponse({"error": "access_code_required"}, status_code=401)
 
 
 def require_admin_or_redirect(request: Request, config: dict[str, Any]) -> RedirectResponse | None:
@@ -1052,6 +1115,9 @@ llm = LLMTherapist(config)
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
+    maybe_redirect = require_access_or_redirect(request, config)
+    if maybe_redirect:
+        return maybe_redirect
     styles = style_catalog(config)
     return templates.TemplateResponse(
         request=request,
@@ -1066,6 +1132,9 @@ def index(request: Request) -> HTMLResponse:
 
 @app.get("/erklaerung", response_class=HTMLResponse)
 def explanation(request: Request) -> HTMLResponse:
+    maybe_redirect = require_access_or_redirect(request, config)
+    if maybe_redirect:
+        return maybe_redirect
     return templates.TemplateResponse(
         request=request,
         name="explanation.html",
@@ -1074,6 +1143,46 @@ def explanation(request: Request) -> HTMLResponse:
             "system_notice": SYSTEM_NOTICE,
         },
     )
+
+
+@app.get("/zugang", response_class=HTMLResponse)
+def access_login_page(request: Request, error: str = "") -> HTMLResponse:
+    if not access_protection_enabled(config) or access_authenticated(request, config):
+        return RedirectResponse(url="/", status_code=302)
+    return templates.TemplateResponse(
+        request=request,
+        name="access_login.html",
+        context={
+            "request": request,
+            "error": error,
+        },
+    )
+
+
+@app.post("/zugang")
+def access_login(access_code: str = Form(...)) -> RedirectResponse:
+    configured_code = access_code_value(config)
+    if not configured_code:
+        return RedirectResponse(url="/", status_code=302)
+    if not hmac.compare_digest(access_code.strip(), configured_code):
+        return RedirectResponse(url="/zugang?error=Zugriffscode+ungueltig", status_code=302)
+    resp = RedirectResponse(url="/", status_code=302)
+    resp.set_cookie(
+        access_cookie_name(config),
+        issue_access_token(config),
+        max_age=int(config.get("app", {}).get("access_session_ttl_seconds", 43200)),
+        httponly=True,
+        samesite="lax",
+        secure=bool(config.get("app", {}).get("access_cookie_secure", False)),
+    )
+    return resp
+
+
+@app.get("/zugang/logout")
+def access_logout() -> RedirectResponse:
+    resp = RedirectResponse(url="/zugang", status_code=302)
+    resp.delete_cookie(access_cookie_name(config))
+    return resp
 
 
 @app.get("/admin", response_class=HTMLResponse)
@@ -1133,7 +1242,10 @@ def admin_logout() -> RedirectResponse:
 
 
 @app.post("/api/chat")
-def chat(payload: ChatRequest) -> JSONResponse:
+def chat(request: Request, payload: ChatRequest) -> JSONResponse:
+    maybe_unauthorized = require_access_or_unauthorized(request, config)
+    if maybe_unauthorized:
+        return maybe_unauthorized
     message = sanitize_user_message(payload.message)
     style_key, _style_info = effective_style(config, payload.style)
     max_user_message_length = int(config.get("app", {}).get("max_user_message_length", 4000))
@@ -1205,6 +1317,7 @@ def health() -> dict[str, Any]:
     llm_config = config.get("llm", {})
     return {
         "ok": True,
+        "access_protection_enabled": access_protection_enabled(config),
         "llm_enabled": bool(llm_config.get("enabled")),
         "llm_configured": bool(llm_config.get("api_url") and llm_config.get("api_key")),
         "llm_api_url": str(llm_config.get("api_url", "")),
