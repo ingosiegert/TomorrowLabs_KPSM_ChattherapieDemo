@@ -20,6 +20,8 @@ uvicorn --app-dir . app:app --reload
 
 Danach ist die Weboberflaeche unter `http://127.0.0.1:8000` erreichbar.
 
+Fuer Zugriff aus dem lokalen Netz den Server mit `--host 0.0.0.0` starten (oder `HOST=0.0.0.0 ./start.sh` nutzen).
+
 Alternativ startet alles automatisch mit:
 
 ```bash
@@ -107,6 +109,7 @@ Die Anmeldung erfolgt unter `/admin/login` mit `app.admin_password` aus der Konf
 ## Startskript
 
 `start.sh` erstellt bei Bedarf `.venv`, installiert alle Abhaengigkeiten und startet den Server robust mit `uvicorn --app-dir`.
+Standardmaessig bindet `start.sh` auf `0.0.0.0` (alle Netzwerkschnittstellen). Fuer nur lokalen Zugriff: `HOST=127.0.0.1 ./start.sh`.
 
 ## Hinweis
 

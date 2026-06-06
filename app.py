@@ -1148,7 +1148,7 @@ def explanation(request: Request) -> HTMLResponse:
 @app.get("/zugang", response_class=HTMLResponse)
 def access_login_page(request: Request, error: str = "") -> HTMLResponse:
     if not access_protection_enabled(config) or access_authenticated(request, config):
-        return RedirectResponse(url="/", status_code=302)
+        return RedirectResponse(url="/eliza", status_code=302)
     return templates.TemplateResponse(
         request=request,
         name="access_login.html",
@@ -1163,10 +1163,10 @@ def access_login_page(request: Request, error: str = "") -> HTMLResponse:
 def access_login(access_code: str = Form(...)) -> RedirectResponse:
     configured_code = access_code_value(config)
     if not configured_code:
-        return RedirectResponse(url="/", status_code=302)
+        return RedirectResponse(url="/eliza", status_code=302)
     if not hmac.compare_digest(access_code.strip(), configured_code):
         return RedirectResponse(url="/zugang?error=Zugriffscode+ungueltig", status_code=302)
-    resp = RedirectResponse(url="/", status_code=302)
+    resp = RedirectResponse(url="/eliza", status_code=302)
     resp.set_cookie(
         access_cookie_name(config),
         issue_access_token(config),

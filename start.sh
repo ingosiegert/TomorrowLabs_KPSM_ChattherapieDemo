@@ -4,8 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 VENV_DIR="${VENV_DIR:-${SCRIPT_DIR}/.venv}"
-HOST="${HOST:-127.0.0.1}"
-PORT="${PORT:-8050}"
+HOST="${HOST:-0.0.0.0}"
+PORT="${PORT:-9010}"
 
 if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
   echo "Python interpreter not found: ${PYTHON_BIN}" >&2
